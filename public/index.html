@@ -350,6 +350,77 @@ async function fetchNews(sport, league, teamId) {
   return data?.articles || [];
 }
 
+// MLB.com uses team-name slugs (e.g. "mets", "yankees") for its injuries/roster-moves page.
+// This only applies to baseball -- NFL.com and NBA.com don't have an equivalent scrapeable page in this format.
+const MLB_SLUG_MAP = {
+  'ARI':'dbacks','ATL':'braves','BAL':'orioles','BOS':'redsox','CHC':'cubs','CWS':'whitesox',
+  'CIN':'reds','CLE':'guardians','COL':'rockies','DET':'tigers','HOU':'astros','KC':'royals',
+  'LAA':'angels','LAD':'dodgers','MIA':'marlins','MIL':'brewers','MIN':'twins','NYM':'mets',
+  'NYY':'yankees','OAK':'athletics','PHI':'phillies','PIT':'pirates','SD':'padres','SF':'giants',
+  'SEA':'mariners','STL':'cardinals','TB':'rays','TEX':'rangers','TOR':'bluejays','WSH':'nationals'
+};
+
+async function fetchTeamInjuriesAndMoves(sport, teamAbbr) {
+  if (sport !== 'baseball') return { found: false, injuries: [], transactions: [] };
+  const slug = MLB_SLUG_MAP[teamAbbr];
+  if (!slug) return { found: false, injuries: [], transactions: [] };
+
+  try {
+    const r = await fetch(`${PROXY}/mlbraw/${slug}`);
+    if (!r.ok) return { found: false, injuries: [], transactions: [] };
+    const html = await r.text();
+
+    const contentRe = /"__typename"\s*:\s*"Markdown"[^}]{0,50}"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    const allBlocks = [];
+    let cm;
+    while ((cm = contentRe.exec(html)) !== null) {
+      let raw;
+      try { raw = JSON.parse('"' + cm[1] + '"'); }
+      catch { raw = cm[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'); }
+      allBlocks.push(raw.replace(/<[^>]+>/g, '').replace(/[ \t]{2,}/g, ' '));
+    }
+
+    const injuries = [], transactions = [];
+    let inInjuries = false, inTransactions = false;
+    const monthRe = /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+$/;
+    let txDate = '';
+
+    for (const block of allBlocks) {
+      const t = block.trim();
+      if (/LATEST INJURIES/i.test(t))     { inInjuries = true; inTransactions = false; continue; }
+      if (/LATEST TRANSACTIONS/i.test(t)) { inInjuries = false; inTransactions = true; continue; }
+      if (/More from MLB/i.test(t))        { inInjuries = false; inTransactions = false; continue; }
+
+      if (inInjuries) {
+        const nameM = t.match(/^(RHP|LHP|SP|RP|C|1B|2B|3B|SS|OF|IF|DH|INF)\s+([A-Za-z][A-Za-z .'-]+)/);
+        if (!nameM) continue;
+        const injM = t.match(/\*\*Injury:\*\*\s*([^\n*]{4,120})/i);
+        const retM = t.match(/\*\*Expected return:\*\*\s*([^\n*]{2,60})/i);
+        const injury = injM?.[1]?.replace(/\*+$/,'').trim() || '';
+        const ret    = retM?.[1]?.replace(/\*+$/,'').trim() || 'TBD';
+        if (nameM[2] && injury) injuries.push({ pos: nameM[1], name: nameM[2].trim(), injury, expectedReturn: ret });
+      }
+
+      if (inTransactions) {
+        const stripped = t.replace(/\*+/g, '').trim();
+        if (monthRe.test(stripped)) { txDate = stripped; continue; }
+        if (t.startsWith('•') || t.startsWith('·') || t.startsWith('-') ||
+            /Recalled|Optioned|Activated|Placed|Designated|Transferred|Selected|Released|Reinstated|Claimed/i.test(t)) {
+          const clean = t.replace(/^[•·\-\s]+/,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/\*+/g,'').trim();
+          if (clean.length > 5) {
+            const date = txDate || 'Recent';
+            transactions.push({ date, move: clean });
+          }
+        }
+      }
+    }
+
+    return { found: true, injuries, transactions };
+  } catch(e) {
+    return { found: false, injuries: [], transactions: [] };
+  }
+}
+
 function filterNews(articles, teamAbbr, teamName) {
   const now = Date.now();
   const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
@@ -390,7 +461,7 @@ const EMILY_OPENERS = {
   offDay:  ["No game today but I still have news for you!!"],
 };
 
-function buildGameDataPayload(kid, sel, g, detail, articles, age) {
+function buildGameDataPayload(kid, sel, g, detail, articles, age, injuryData) {
   const playerLines = formatPlayerLines(detail, sel.teamAbbr, sel.sport);
   return {
     date: document.getElementById('dateDisplay').textContent,
@@ -407,7 +478,13 @@ function buildGameDataPayload(kid, sel, g, detail, articles, age) {
     } : null,
     topPerformers: playerLines.primary || null,
     secondaryStats: playerLines.secondary || null,
-    newsHeadlines: (articles || []).slice(0, 3).map(a => a.headline).filter(Boolean)
+    newsHeadlines: (articles || []).slice(0, 3).map(a => a.headline).filter(Boolean),
+    injuries: (injuryData?.found && injuryData.injuries?.length)
+      ? injuryData.injuries.slice(0, 6).map(i => `${i.pos} ${i.name}: ${i.injury} (Expected return: ${i.expectedReturn})`)
+      : null,
+    rosterMoves: (injuryData?.found && injuryData.transactions?.length)
+      ? injuryData.transactions.slice(0, 6).map(t => `${t.date}: ${t.move}`)
+      : null
   };
 }
 
@@ -425,7 +502,7 @@ async function fetchAIBody(kid, recipientName, age, sport, gameData) {
   return data.text;
 }
 
-function buildTemplateEmail(kid, sel, g, detail, articles) {
+function buildTemplateEmail(kid, sel, g, detail, articles, injuryData) {
   const isEmily = kid === 'emily';
   const openers = isEmily ? EMILY_OPENERS : NOAH_OPENERS;
   const moodType = g?.moodType || 'offDay';
@@ -459,6 +536,20 @@ function buildTemplateEmail(kid, sel, g, detail, articles) {
     body += `${sel.teamName.toUpperCase()} NEWS:\n${articles[0].headline}\n\n`;
   }
 
+  if (injuryData?.found && injuryData.injuries?.length) {
+    body += `INJURIES:\n`;
+    injuryData.injuries.slice(0, 6).forEach(inj => {
+      body += `* ${inj.pos} ${inj.name}: ${inj.injury} (Expected return: ${inj.expectedReturn})\n`;
+    });
+    body += '\n';
+  }
+
+  if (injuryData?.found && injuryData.transactions?.length) {
+    body += `ROSTER MOVES:\n`;
+    injuryData.transactions.slice(0, 6).forEach(t => { body += `* ${t.date}: ${t.move}\n`; });
+    body += '\n';
+  }
+
   body += isEmily
     ? `Keep cheering for the ${sel.teamName} from camp!\n\nLove you to the moon and back,\nDad xoxo`
     : `Keep repping the colors. Miss you man.\n\nLove, Dad`;
@@ -466,20 +557,37 @@ function buildTemplateEmail(kid, sel, g, detail, articles) {
   return body;
 }
 
-async function buildAIEmail(kid, sel, g, detail, articles, age) {
+async function buildAIEmail(kid, sel, g, detail, articles, age, injuryData) {
   const recipientName = kid === 'emily' ? 'Emily' : 'Noah';
   const subjectLabel = g?.moodType === 'upcoming' ? 'Game Day' : g?.moodType === 'live' ? 'Live Update' : 'Update';
   const greeting = kid === 'emily' ? `Hi Emily!!` : `Hey Noah,`;
-  const gameData = buildGameDataPayload(kid, sel, g, detail, articles, age);
+  const gameData = buildGameDataPayload(kid, sel, g, detail, articles, age, injuryData);
   const aiBody = await fetchAIBody(kid, recipientName, age, sel.sport, gameData);
 
   let body = `SUBJECT: ${sel.teamName} ${subjectLabel} -- ${document.getElementById('dateDisplay').textContent}\n\n${greeting}\n\n${aiBody}\n\n`;
 
   if (g?.completed) {
+    const playerLines = formatPlayerLines(detail, sel.teamAbbr, sel.sport);
+    if (playerLines.primary) body += `TOP PERFORMERS:\n${playerLines.primary}\n\n`;
+    if (playerLines.secondary) body += `PITCHING:\n${playerLines.secondary}\n\n`;
     const boxLines = formatBoxScoreLines(detail);
     if (boxLines) body += `BOX SCORE:\n${boxLines}\n\n`;
   }
   if (g?.teamRecord) body += `RECORD:\n${g.teamRecord}\n\n`;
+
+  if (injuryData?.found && injuryData.injuries?.length) {
+    body += `INJURIES:\n`;
+    injuryData.injuries.slice(0, 6).forEach(inj => {
+      body += `* ${inj.pos} ${inj.name}: ${inj.injury} (Expected return: ${inj.expectedReturn})\n`;
+    });
+    body += '\n';
+  }
+
+  if (injuryData?.found && injuryData.transactions?.length) {
+    body += `ROSTER MOVES:\n`;
+    injuryData.transactions.slice(0, 6).forEach(t => { body += `* ${t.date}: ${t.move}\n`; });
+    body += '\n';
+  }
 
   body += kid === 'emily'
     ? `Keep cheering for the ${sel.teamName} from camp!\n\nLove you to the moon and back,\nDad xoxo`
@@ -501,11 +609,12 @@ async function buildEmailFor(kid, age, useAI) {
 
   const articlesRaw = await fetchNews(sel.sport, sel.league, sel.teamId);
   const articles = filterNews(articlesRaw, sel.teamAbbr, sel.teamName);
+  const injuryData = await fetchTeamInjuriesAndMoves(sel.sport, sel.teamAbbr);
 
   if (useAI) {
-    return await buildAIEmail(kid, sel, g, detail, articles, age);
+    return await buildAIEmail(kid, sel, g, detail, articles, age, injuryData);
   }
-  return buildTemplateEmail(kid, sel, g, detail, articles);
+  return buildTemplateEmail(kid, sel, g, detail, articles, injuryData);
 }
 
 async function go() {
