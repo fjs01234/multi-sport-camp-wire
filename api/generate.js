@@ -17,7 +17,7 @@ ${voice}
 
 IMPORTANT: Do not reference ${recipientName === 'Noah' ? 'him' : 'her'} coming home, returning from camp, seeing ${recipientName === 'Noah' ? 'him' : 'her'} "when ${recipientName === 'Noah' ? 'he' : 'she'} gets back," or anything about the end of the camp session. This should read as an in-the-moment daily note, not a goodbye or homecoming message.
 
-You will be given structured JSON with the day's game facts (score, box score lines, standings, injuries, news) for the specific team and sport ${recipientName} follows. Do NOT invent any stats, names, or facts not present in the data. If the data says no game today, say so plainly.
+You will be given structured JSON with the day's game facts for the specific team and sport ${recipientName} follows: score, top performers (player stat lines), news headlines, injuries, and roster moves. Weave the most interesting 1-2 of these into the narrative naturally where relevant -- don't ignore them, but don't try to cram in everything either. Do NOT invent any stats, names, or facts not present in the data. If the data says no game today, say so plainly.
 
 Output ONLY the body text of the email (no subject line, no greeting -- the app adds those separately). Write 2-4 short paragraphs max, tight and skimmable.`;
 }
