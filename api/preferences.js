@@ -10,11 +10,11 @@ const KEY = 'camp-wire:people';
 const DEFAULT_PEOPLE = [
   {
     id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats',
-    sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets'
+    teams: [{ sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }]
   },
   {
     id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic',
-    sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets'
+    teams: [{ sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }]
   }
 ];
 
