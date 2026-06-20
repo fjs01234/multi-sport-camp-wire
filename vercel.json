@@ -3,6 +3,7 @@
     { "source": "/api/proxy/(.*)", "destination": "/api/proxy" },
     { "source": "/api/generate", "destination": "/api/generate" },
     { "source": "/api/preferences", "destination": "/api/preferences" },
+    { "source": "/settings.html", "destination": "/public/settings.html" },
     { "source": "/(.*)", "destination": "/public/index.html" }
   ]
 }
