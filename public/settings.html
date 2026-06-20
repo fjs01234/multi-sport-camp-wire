@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage People -- Multi-Sport Camp Wire</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+  :root { --blue:#002D72; --orange:#FF5910; --white:#F8F4EF; --cream:#EDE8E0; --dark:#0A0A0A; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--dark); color:var(--white); font-family:'IBM Plex Sans',sans-serif; min-height:100vh; }
+  body::before { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 20% 50%,rgba(0,45,114,.4) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(255,89,16,.15) 0%,transparent 50%); pointer-events:none; z-index:0; }
+  .container { position:relative; z-index:1; max-width:700px; margin:0 auto; padding:40px 20px 80px; }
+  .header { text-align:center; margin-bottom:28px; }
+  .logo-line { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:8px; }
+  .badge { width:52px; height:52px; background:var(--blue); border:3px solid var(--orange); border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue',cursive; font-size:24px; color:var(--orange); flex-shrink:0; }
+  h1 { font-family:'Bebas Neue',cursive; font-size:clamp(24px,5vw,40px); letter-spacing:3px; background:linear-gradient(135deg,var(--white) 40%,var(--orange)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .subtitle { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--orange); letter-spacing:4px; text-transform:uppercase; margin-top:6px; }
+
+  .back-link { display:inline-block; margin-bottom:24px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:rgba(248,244,239,.6); text-decoration:none; border:1px solid rgba(255,255,255,.2); padding:8px 16px; border-radius:4px; transition:all .2s; }
+  .back-link:hover { border-color:var(--orange); color:var(--orange); }
+
+  .settings { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:20px; margin-bottom:24px; }
+  .settings-title { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:3px; color:rgba(248,244,239,.5); text-transform:uppercase; margin-bottom:16px; }
+
+  select, input[type="text"], input[type="number"] { width:100%; padding:10px; margin-bottom:8px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.2); color:var(--white); border-radius:4px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
+  select:last-child { margin-bottom:0; }
+
+  .people-list { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
+  .person-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:5px; }
+  .person-row-info { font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
+  .person-row-name { font-weight:600; color:var(--white); }
+  .person-row-meta { color:rgba(248,244,239,.5); font-size:11px; margin-top:2px; }
+  .person-row-edit { background:transparent; border:1px solid rgba(255,255,255,.2); color:rgba(255,255,255,.6); border-radius:3px; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
+  .person-row-edit:hover { border-color:var(--orange); color:var(--orange); }
+
+  .person-form { display:none; }
+  .person-form.on { display:block; }
+
+  .save-row { display:flex; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap; }
+  .save-btn { padding:10px 22px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); color:var(--white); border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:1px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
+  .save-btn:hover { border-color:var(--orange); color:var(--orange); }
+  .save-status { font-family:'IBM Plex Mono',monospace; font-size:11px; color:#4ade80; opacity:0; transition:opacity .3s; }
+  .save-status.on { opacity:1; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo-line">
+      <div class="badge">⚙️</div>
+      <h1>Manage People</h1>
+      <div class="badge">⚙️</div>
+    </div>
+    <div class="subtitle">Multi-Sport Camp Wire Settings</div>
+  </div>
+
+  <a class="back-link" href="/">← Back to Camp Wire</a>
+
+  <div class="settings">
+    <div class="settings-title">People</div>
+    <div id="peopleList" class="people-list"></div>
+    <button class="save-btn" id="addPersonBtn" onclick="openPersonForm(null)">+ Add Person</button>
+
+    <div id="personForm" class="person-form">
+      <div class="settings-title" id="formTitle" style="margin-top:18px;">Add Person</div>
+      <input type="text" id="formName" placeholder="Name" />
+      <input type="number" id="formAge" placeholder="Age" min="1" max="99" />
+      <select id="formGender">
+        <option value="">Gender (for pronouns in AI email)</option>
+        <option value="male">Male (he/him)</option>
+        <option value="female">Female (she/her)</option>
+        <option value="other">Other (they/them)</option>
+      </select>
+      <select id="formTone">
+        <option value="teen_stats">Teen Stats Nerd -- real terminology, dry humor, no hype</option>
+        <option value="young_enthusiastic">Young &amp; Enthusiastic -- warm, simple, upbeat</option>
+        <option value="casual_fan">Casual Fan -- friendly, easygoing, hits the highlights</option>
+      </select>
+      <div class="save-row">
+        <button class="save-btn" onclick="savePersonForm()">Save Person</button>
+        <button class="save-btn" id="deletePersonBtn" onclick="deleteCurrentPerson()" style="display:none; border-color:#ff5050; color:#ff8080;">Delete</button>
+        <button class="save-btn" onclick="closePersonForm()">Cancel</button>
+      </div>
+    </div>
+    <div class="save-status" id="saveStatus" style="margin-top:10px;">Saved ✓</div>
+  </div>
+</div>
+
+<script>
+const PREFERENCES = '/api/preferences';
+let people = [];
+let editingPersonId = null;
+
+const TONE_LABELS = {
+  teen_stats: 'Teen Stats Nerd',
+  young_enthusiastic: 'Young & Enthusiastic',
+  casual_fan: 'Casual Fan'
+};
+
+async function fetchJSON(url, opts) {
+  try { const r = await fetch(url, opts); if (!r.ok) return null; return await r.json(); } catch { return null; }
+}
+
+async function loadPeople() {
+  const data = await fetchJSON(PREFERENCES);
+  people = (data && Array.isArray(data.people) && data.people.length) ? data.people : [
+    { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' },
+    { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }
+  ];
+  renderPeopleList();
+}
+
+function renderPeopleList() {
+  const el = document.getElementById('peopleList');
+  el.innerHTML = people.map(p => `
+    <div class="person-row">
+      <div class="person-row-info">
+        <div class="person-row-name">${p.name}</div>
+        <div class="person-row-meta">Age ${p.age} -- ${TONE_LABELS[p.tonePreset] || p.tonePreset}${p.teamName ? ' -- ' + p.teamName : ''}</div>
+      </div>
+      <button class="person-row-edit" onclick="openPersonForm('${p.id}')">Edit</button>
+    </div>
+  `).join('');
+}
+
+async function persistPeople() {
+  const res = await fetchJSON(PREFERENCES, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ people })
+  });
+  if (res?.people) people = res.people;
+  return !!res;
+}
+
+function openPersonForm(personId) {
+  editingPersonId = personId;
+  const form = document.getElementById('personForm');
+  const title = document.getElementById('formTitle');
+  const deleteBtn = document.getElementById('deletePersonBtn');
+
+  if (personId) {
+    const p = people.find(x => x.id === personId);
+    title.textContent = `Edit ${p.name}`;
+    document.getElementById('formName').value = p.name;
+    document.getElementById('formAge').value = p.age;
+    document.getElementById('formGender').value = p.gender || '';
+    document.getElementById('formTone').value = p.tonePreset || 'casual_fan';
+    deleteBtn.style.display = people.length > 1 ? 'inline-block' : 'none';
+  } else {
+    title.textContent = 'Add Person';
+    document.getElementById('formName').value = '';
+    document.getElementById('formAge').value = '';
+    document.getElementById('formGender').value = '';
+    document.getElementById('formTone').value = 'casual_fan';
+    deleteBtn.style.display = 'none';
+  }
+  form.classList.add('on');
+}
+
+function closePersonForm() {
+  document.getElementById('personForm').classList.remove('on');
+  editingPersonId = null;
+}
+
+async function savePersonForm() {
+  const name = document.getElementById('formName').value.trim();
+  const age = parseInt(document.getElementById('formAge').value, 10);
+  const gender = document.getElementById('formGender').value;
+  const tonePreset = document.getElementById('formTone').value;
+
+  if (!name || !age) { alert('Please enter a name and age.'); return; }
+
+  if (editingPersonId) {
+    const idx = people.findIndex(p => p.id === editingPersonId);
+    if (idx >= 0) people[idx] = { ...people[idx], name, age, gender, tonePreset };
+  } else {
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36);
+    people.push({
+      id, name, age, gender, tonePreset,
+      sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets'
+    });
+  }
+
+  const ok = await persistPeople();
+  if (ok) {
+    closePersonForm();
+    renderPeopleList();
+    flashSaved();
+  }
+}
+
+async function deleteCurrentPerson() {
+  if (!editingPersonId) return;
+  if (people.length <= 1) { alert('You need at least one person.'); return; }
+  if (!confirm('Delete this person?')) return;
+
+  people = people.filter(p => p.id !== editingPersonId);
+  const ok = await persistPeople();
+  if (ok) {
+    closePersonForm();
+    renderPeopleList();
+    flashSaved();
+  }
+}
+
+function flashSaved() {
+  const statusEl = document.getElementById('saveStatus');
+  statusEl.classList.add('on');
+  setTimeout(() => statusEl.classList.remove('on'), 2000);
+}
+
+loadPeople();
+</script>
+</body>
+</html>
