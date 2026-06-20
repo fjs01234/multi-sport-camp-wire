@@ -136,7 +136,19 @@ function defaultTeams() {
 }
 
 async function loadPeople() {
-  const data = await fetchJSON(PREFERENCES);
+  let data = null;
+  try {
+    const r = await fetch(PREFERENCES);
+    const bodyText = await r.text();
+    if (!r.ok) {
+      showDebugError(`Load failed (HTTP ${r.status}): ${bodyText.slice(0, 300)}`);
+    } else {
+      try { data = JSON.parse(bodyText); } catch (e) { showDebugError(`Load failed (bad JSON): ${bodyText.slice(0, 300)}`); }
+    }
+  } catch (e) {
+    showDebugError(`Load failed (network error): ${e.message}`);
+  }
+
   people = (data && Array.isArray(data.people) && data.people.length) ? data.people : [
     { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', teams: defaultTeams() },
     { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', teams: defaultTeams() }
@@ -231,13 +243,37 @@ function renderPeopleList() {
 }
 
 async function persistPeople() {
-  const res = await fetchJSON(PREFERENCES, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ people })
-  });
-  if (res?.people) people = res.people;
-  return !!res;
+  try {
+    const r = await fetch(PREFERENCES, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ people })
+    });
+    const bodyText = await r.text();
+    let parsed;
+    try { parsed = JSON.parse(bodyText); } catch { parsed = null; }
+
+    if (!r.ok) {
+      showDebugError(`Save failed (HTTP ${r.status}): ${bodyText.slice(0, 300)}`);
+      return false;
+    }
+    if (parsed?.people) people = parsed.people;
+    return true;
+  } catch (e) {
+    showDebugError(`Save failed (network error): ${e.message}`);
+    return false;
+  }
+}
+
+function showDebugError(msg) {
+  let el = document.getElementById('debugError');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'debugError';
+    el.style.cssText = 'background:rgba(255,50,50,.15);border:1px solid rgba(255,50,50,.4);color:#ff8080;padding:14px;border-radius:4px;margin-top:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;';
+    document.querySelector('.settings').appendChild(el);
+  }
+  el.textContent = msg;
 }
 
 async function openPersonForm(personId) {
