@@ -31,6 +31,16 @@
   .kid-label.emily { color:var(--orange); }
   select { width:100%; padding:10px; margin-bottom:8px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.2); color:var(--white); border-radius:4px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
   select:last-child { margin-bottom:0; }
+  input[type="text"], input[type="number"] { width:100%; padding:10px; margin-bottom:8px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.2); color:var(--white); border-radius:4px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
+  .people-list { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
+  .person-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:5px; }
+  .person-row-info { font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
+  .person-row-name { font-weight:600; color:var(--white); }
+  .person-row-meta { color:rgba(248,244,239,.5); font-size:11px; margin-top:2px; }
+  .person-row-edit { background:transparent; border:1px solid rgba(255,255,255,.2); color:rgba(255,255,255,.6); border-radius:3px; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
+  .person-row-edit:hover { border-color:var(--orange); color:var(--orange); }
+  .person-form { display:none; }
+  .person-form.on { display:block; }
   .save-row { display:flex; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap; }
   .save-btn { padding:10px 22px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); color:var(--white); border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:1px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
   .save-btn:hover { border-color:var(--orange); color:var(--orange); }
@@ -50,10 +60,10 @@
   .err.on { display:block; }
   .single-card { max-width:600px; margin:0 auto; }
   .email-card { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.1); border-radius:6px; overflow:hidden; }
-  .email-card-header { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; }
+  .email-card-header { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; background:rgba(255,89,16,.15); border-bottom:2px solid var(--orange); }
   .email-card-header.noah { background:rgba(0,45,114,.4); border-bottom:2px solid var(--blue); }
   .email-card-header.emily { background:rgba(255,89,16,.15); border-bottom:2px solid var(--orange); }
-  .card-name { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:2px; }
+  .card-name { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:2px; color:var(--orange); }
   .card-name.noah { color:#6b9dff; }
   .card-name.emily { color:var(--orange); }
   .card-age { font-family:'IBM Plex Mono',monospace; font-size:10px; color:rgba(248,244,239,.4); letter-spacing:2px; }
@@ -91,11 +101,36 @@
   </div>
 
   <div class="settings">
+    <div class="settings-title">Manage People</div>
+    <div id="peopleList" class="people-list"></div>
+    <button class="save-btn" id="addPersonBtn" onclick="openPersonForm(null)">+ Add Person</button>
+
+    <div id="personForm" class="person-form">
+      <div class="settings-title" id="formTitle" style="margin-top:18px;">Add Person</div>
+      <input type="text" id="formName" placeholder="Name" />
+      <input type="number" id="formAge" placeholder="Age" min="1" max="99" />
+      <select id="formGender">
+        <option value="">Gender (for pronouns in AI email)</option>
+        <option value="male">Male (he/him)</option>
+        <option value="female">Female (she/her)</option>
+        <option value="other">Other (they/them)</option>
+      </select>
+      <select id="formTone">
+        <option value="teen_stats">Teen Stats Nerd -- real terminology, dry humor, no hype</option>
+        <option value="young_enthusiastic">Young &amp; Enthusiastic -- warm, simple, upbeat</option>
+        <option value="casual_fan">Casual Fan -- friendly, easygoing, hits the highlights</option>
+      </select>
+      <div class="save-row">
+        <button class="save-btn" onclick="savePersonForm()">Save Person</button>
+        <button class="save-btn" id="deletePersonBtn" onclick="deleteCurrentPerson()" style="display:none; border-color:#ff5050; color:#ff8080;">Delete</button>
+        <button class="save-btn" onclick="closePersonForm()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings">
     <div class="settings-title">Who's this email for?</div>
-    <select id="personSelect" onchange="onPersonChange()">
-      <option value="noah">Noah</option>
-      <option value="emily">Emily</option>
-    </select>
+    <select id="personSelect" onchange="onPersonChange()"></select>
 
     <div class="settings-title" style="margin-top:18px;">League</div>
     <select id="leagueSelect" onchange="onLeagueChange()"></select>
@@ -104,7 +139,7 @@
     <select id="teamSelect"></select>
 
     <div class="save-row">
-      <button class="save-btn" onclick="savePreferences()">Save Pick for <span id="saveLabel">Noah</span></button>
+      <button class="save-btn" onclick="saveTeamPick()">Save Team Pick for <span id="saveLabel">Noah</span></button>
       <span class="save-status" id="saveStatus">Saved ✓</span>
     </div>
   </div>
@@ -150,10 +185,16 @@ const LEAGUES = [
   { sport: 'football', league: 'nfl', label: 'NFL' }
 ];
 
-const NOAH_AGE = 15, EMILY_AGE = 12;
 
 let teamCache = {};
-let preferences = null;
+let people = [];          // [{id, name, age, gender, tonePreset, sport, league, teamId, teamAbbr, teamName}]
+let editingPersonId = null; // null = adding new, otherwise editing this id
+
+const TONE_LABELS = {
+  teen_stats: 'Teen Stats Nerd',
+  young_enthusiastic: 'Young & Enthusiastic',
+  casual_fan: 'Casual Fan'
+};
 
 function setDate() {
   const d = new Date();
@@ -184,46 +225,61 @@ async function populateTeamSelect(teamSelectEl, sport, league, selectedTeamId) {
 }
 
 function currentPerson() {
-  return document.getElementById('personSelect').value; // 'noah' or 'emily'
-}
-
-function personLabel(p) {
-  return p === 'emily' ? 'Emily' : 'Noah';
-}
-
-function personAge(p) {
-  return p === 'emily' ? EMILY_AGE : NOAH_AGE;
+  const id = document.getElementById('personSelect').value;
+  return people.find(p => p.id === id) || people[0];
 }
 
 async function loadPreferences() {
   const data = await fetchJSON(PREFERENCES);
-  preferences = data || {
-    noah:  { sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' },
-    emily: { sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }
-  };
+  people = (data && Array.isArray(data.people) && data.people.length) ? data.people : [
+    { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' },
+    { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }
+  ];
 
   populateLeagueSelect(document.getElementById('leagueSelect'));
-  await loadPersonIntoPickers(currentPerson());
+  renderPeopleList();
+  renderPersonSelect();
+  await loadPersonIntoPickers(currentPerson().id);
 }
 
-async function loadPersonIntoPickers(person) {
-  const sel = preferences[person];
+function renderPeopleList() {
+  const el = document.getElementById('peopleList');
+  el.innerHTML = people.map(p => `
+    <div class="person-row">
+      <div class="person-row-info">
+        <div class="person-row-name">${p.name}</div>
+        <div class="person-row-meta">Age ${p.age} -- ${TONE_LABELS[p.tonePreset] || p.tonePreset}</div>
+      </div>
+      <button class="person-row-edit" onclick="openPersonForm('${p.id}')">Edit</button>
+    </div>
+  `).join('');
+}
+
+function renderPersonSelect() {
+  const sel = document.getElementById('personSelect');
+  const prevValue = sel.value;
+  sel.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  if (people.some(p => p.id === prevValue)) sel.value = prevValue;
+}
+
+async function loadPersonIntoPickers(personId) {
+  const person = people.find(p => p.id === personId) || people[0];
+  document.getElementById('personSelect').value = person.id;
   const leagueSel = document.getElementById('leagueSelect');
   const teamSel = document.getElementById('teamSelect');
-  leagueSel.value = `${sel.sport}/${sel.league}`;
-  await populateTeamSelect(teamSel, sel.sport, sel.league, sel.teamId);
+  leagueSel.value = `${person.sport}/${person.league}`;
+  await populateTeamSelect(teamSel, person.sport, person.league, person.teamId);
   updateLabels();
 }
 
 function updateLabels() {
   const p = currentPerson();
-  const name = personLabel(p);
-  document.getElementById('saveLabel').textContent = name;
-  document.getElementById('genLabel').textContent = `${name}'s`;
+  document.getElementById('saveLabel').textContent = p.name;
+  document.getElementById('genLabel').textContent = `${p.name}'s`;
 }
 
 async function onPersonChange() {
-  await loadPersonIntoPickers(currentPerson());
+  await loadPersonIntoPickers(currentPerson().id);
 }
 
 async function onLeagueChange() {
@@ -233,7 +289,7 @@ async function onLeagueChange() {
   await populateTeamSelect(teamSel, sport, league, null);
 }
 
-function readCurrentSelection() {
+function readCurrentTeamSelection() {
   const leagueSel = document.getElementById('leagueSelect');
   const teamSel = document.getElementById('teamSelect');
   const [sport, league] = leagueSel.value.split('/');
@@ -246,19 +302,100 @@ function readCurrentSelection() {
   };
 }
 
-async function savePreferences() {
-  const person = currentPerson();
-  const updated = { ...preferences, [person]: readCurrentSelection() };
+async function persistPeople() {
   const res = await fetchJSON(PREFERENCES, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updated)
+    body: JSON.stringify({ people })
   });
-  if (res) {
-    preferences = res;
+  if (res?.people) people = res.people;
+  return !!res;
+}
+
+async function saveTeamPick() {
+  const person = currentPerson();
+  const teamSel = readCurrentTeamSelection();
+  const idx = people.findIndex(p => p.id === person.id);
+  if (idx >= 0) people[idx] = { ...people[idx], ...teamSel };
+  const ok = await persistPeople();
+  if (ok) {
+    renderPeopleList();
     const statusEl = document.getElementById('saveStatus');
     statusEl.classList.add('on');
     setTimeout(() => statusEl.classList.remove('on'), 2000);
+  }
+}
+
+function openPersonForm(personId) {
+  editingPersonId = personId;
+  const form = document.getElementById('personForm');
+  const title = document.getElementById('formTitle');
+  const deleteBtn = document.getElementById('deletePersonBtn');
+
+  if (personId) {
+    const p = people.find(x => x.id === personId);
+    title.textContent = `Edit ${p.name}`;
+    document.getElementById('formName').value = p.name;
+    document.getElementById('formAge').value = p.age;
+    document.getElementById('formGender').value = p.gender || '';
+    document.getElementById('formTone').value = p.tonePreset || 'casual_fan';
+    deleteBtn.style.display = people.length > 1 ? 'inline-block' : 'none';
+  } else {
+    title.textContent = 'Add Person';
+    document.getElementById('formName').value = '';
+    document.getElementById('formAge').value = '';
+    document.getElementById('formGender').value = '';
+    document.getElementById('formTone').value = 'casual_fan';
+    deleteBtn.style.display = 'none';
+  }
+  form.classList.add('on');
+}
+
+function closePersonForm() {
+  document.getElementById('personForm').classList.remove('on');
+  editingPersonId = null;
+}
+
+async function savePersonForm() {
+  const name = document.getElementById('formName').value.trim();
+  const age = parseInt(document.getElementById('formAge').value, 10);
+  const gender = document.getElementById('formGender').value;
+  const tonePreset = document.getElementById('formTone').value;
+
+  if (!name || !age) { alert('Please enter a name and age.'); return; }
+
+  if (editingPersonId) {
+    const idx = people.findIndex(p => p.id === editingPersonId);
+    if (idx >= 0) people[idx] = { ...people[idx], name, age, gender, tonePreset };
+  } else {
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36);
+    people.push({
+      id, name, age, gender, tonePreset,
+      sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets'
+    });
+  }
+
+  const ok = await persistPeople();
+  if (ok) {
+    closePersonForm();
+    renderPeopleList();
+    renderPersonSelect();
+    await loadPersonIntoPickers(editingPersonId || people[people.length - 1].id);
+  }
+}
+
+async function deleteCurrentPerson() {
+  if (!editingPersonId) return;
+  if (people.length <= 1) { alert('You need at least one person.'); return; }
+  if (!confirm('Delete this person?')) return;
+
+  people = people.filter(p => p.id !== editingPersonId);
+  const ok = await persistPeople();
+  if (ok) {
+    closePersonForm();
+    renderPeopleList();
+    renderPersonSelect();
+    await loadPersonIntoPickers(people[0].id);
   }
 }
 
@@ -456,7 +593,7 @@ function filterNews(articles, teamAbbr, teamName) {
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-const NOAH_OPENERS = {
+const STATS_OPENERS = {
   bigWin:  ["Big one for your team --", "Statement game --", "That's how you do it --"],
   win:     ["Your team got it done --", "Solid win --", "Good day to be a fan --"],
   upcoming:["Game day --", "Big one on tap --", "Let's get to it --"],
@@ -465,7 +602,7 @@ const NOAH_OPENERS = {
   bigLoss: ["Rough one --", "Forgettable game --"],
   offDay:  ["No game today, but here's the latest --", "Off day -- here's what's going on --"],
 };
-const EMILY_OPENERS = {
+const ENTHUSIASTIC_OPENERS = {
   bigWin:  ["AMAZING news from your team!!","Your team is ON FIRE!!"],
   win:     ["Great news from your favorite team!!","Your team came through!!"],
   upcoming:["It's GAME DAY!!","Big game today -- cheer them on from camp!!"],
@@ -473,6 +610,20 @@ const EMILY_OPENERS = {
   loss:    ["Your team had a tough one, but they never give up!!"],
   bigLoss: ["Ugh, tough one -- but we still believe!!"],
   offDay:  ["No game today but I still have news for you!!"],
+};
+const CASUAL_OPENERS = {
+  bigWin:  ["Good news from your team --", "Nice win to pass along --"],
+  win:     ["Your team won --", "Quick update -- good one today --"],
+  upcoming:["Game day for your team --", "Heads up, they play today --"],
+  live:    ["Game's going on right now --"],
+  loss:    ["Tough one for your team today --"],
+  bigLoss: ["Not a great day for your team --"],
+  offDay:  ["No game today, but here's a quick update --"],
+};
+const OPENERS_BY_TONE = {
+  teen_stats: STATS_OPENERS,
+  young_enthusiastic: ENTHUSIASTIC_OPENERS,
+  casual_fan: CASUAL_OPENERS
 };
 
 function buildGameDataPayload(kid, sel, g, detail, articles, age, injuryData) {
@@ -502,11 +653,14 @@ function buildGameDataPayload(kid, sel, g, detail, articles, age, injuryData) {
   };
 }
 
-async function fetchAIBody(kid, recipientName, age, sport, gameData) {
+async function fetchAIBody(person, sport, gameData) {
   const res = await fetch(GENERATE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient: kid, recipientName, age, sport, gameData })
+    body: JSON.stringify({
+      recipientName: person.name, age: person.age, sport,
+      tonePreset: person.tonePreset, gender: person.gender, gameData
+    })
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
@@ -516,11 +670,11 @@ async function fetchAIBody(kid, recipientName, age, sport, gameData) {
   return data.text;
 }
 
-function buildTemplateEmail(kid, sel, g, detail, articles, injuryData) {
-  const isEmily = kid === 'emily';
-  const openers = isEmily ? EMILY_OPENERS : NOAH_OPENERS;
+function buildTemplateEmail(person, sel, g, detail, articles, injuryData) {
+  const isWarm = person.tonePreset === 'young_enthusiastic';
+  const openers = OPENERS_BY_TONE[person.tonePreset] || CASUAL_OPENERS;
   const moodType = g?.moodType || 'offDay';
-  const greeting = isEmily ? `Hi Emily!!` : `Hey Noah,`;
+  const greeting = isWarm ? `Hi ${person.name}!!` : `Hey ${person.name},`;
   const subjectLabel = moodType === 'upcoming' ? 'Game Day' : moodType === 'live' ? 'Live Update' : 'Update';
 
   let body = `SUBJECT: ${sel.teamName} ${subjectLabel} -- ${document.getElementById('dateDisplay').textContent}\n\n${greeting}\n\n${pick(openers[moodType] || openers.offDay)}\n\n`;
@@ -564,19 +718,19 @@ function buildTemplateEmail(kid, sel, g, detail, articles, injuryData) {
     body += '\n';
   }
 
-  body += isEmily
+  body += isWarm
     ? `Keep cheering for the ${sel.teamName} from camp!\n\nLove you to the moon and back,\nDad xoxo`
-    : `Keep repping the colors. Miss you man.\n\nLove, Dad`;
+    : `Keep repping the colors. Miss you, ${person.name}.\n\nLove, Dad`;
 
   return body;
 }
 
-async function buildAIEmail(kid, sel, g, detail, articles, age, injuryData) {
-  const recipientName = kid === 'emily' ? 'Emily' : 'Noah';
+async function buildAIEmail(person, sel, g, detail, articles, injuryData) {
+  const isWarm = person.tonePreset === 'young_enthusiastic';
   const subjectLabel = g?.moodType === 'upcoming' ? 'Game Day' : g?.moodType === 'live' ? 'Live Update' : 'Update';
-  const greeting = kid === 'emily' ? `Hi Emily!!` : `Hey Noah,`;
-  const gameData = buildGameDataPayload(kid, sel, g, detail, articles, age, injuryData);
-  const aiBody = await fetchAIBody(kid, recipientName, age, sel.sport, gameData);
+  const greeting = isWarm ? `Hi ${person.name}!!` : `Hey ${person.name},`;
+  const gameData = buildGameDataPayload(person.name, sel, g, detail, articles, person.age, injuryData);
+  const aiBody = await fetchAIBody(person, sel.sport, gameData);
 
   let body = `SUBJECT: ${sel.teamName} ${subjectLabel} -- ${document.getElementById('dateDisplay').textContent}\n\n${greeting}\n\n${aiBody}\n\n`;
 
@@ -603,14 +757,14 @@ async function buildAIEmail(kid, sel, g, detail, articles, age, injuryData) {
     body += '\n';
   }
 
-  body += kid === 'emily'
+  body += isWarm
     ? `Keep cheering for the ${sel.teamName} from camp!\n\nLove you to the moon and back,\nDad xoxo`
-    : `Keep repping the colors. Miss you man.\n\nLove, Dad`;
+    : `Keep repping the colors. Miss you, ${person.name}.\n\nLove, Dad`;
 
   return body;
 }
 
-async function buildEmailFor(kid, age, useAI, sel) {
+async function buildEmailFor(person, useAI, sel) {
   const game = await findTeamGame(sel.sport, sel.league, sel.teamId, sel.teamAbbr);
   const g = parseGame(game, sel.teamId);
 
@@ -625,9 +779,9 @@ async function buildEmailFor(kid, age, useAI, sel) {
   const injuryData = await fetchTeamInjuriesAndMoves(sel.sport, sel.teamAbbr);
 
   if (useAI) {
-    return await buildAIEmail(kid, sel, g, detail, articles, age, injuryData);
+    return await buildAIEmail(person, sel, g, detail, articles, injuryData);
   }
-  return buildTemplateEmail(kid, sel, g, detail, articles, injuryData);
+  return buildTemplateEmail(person, sel, g, detail, articles, injuryData);
 }
 
 async function go() {
@@ -642,9 +796,7 @@ async function go() {
   errEl.classList.remove('on');
 
   const person = currentPerson();
-  const age = personAge(person);
-  const name = personLabel(person);
-  const sel = readCurrentSelection();
+  const sel = readCurrentTeamSelection();
 
   try {
     const useAI = document.getElementById('useAI')?.checked;
@@ -652,28 +804,21 @@ async function go() {
 
     if (useAI) {
       try {
-        email = await buildEmailFor(person, age, true, sel);
+        email = await buildEmailFor(person, true, sel);
       } catch (aiErr) {
         console.error('AI generation failed, falling back to template:', aiErr);
         aiFailed = true;
         aiErrorMsg = aiErr?.message || String(aiErr);
-        email = await buildEmailFor(person, age, false, sel);
+        email = await buildEmailFor(person, false, sel);
       }
     } else {
-      email = await buildEmailFor(person, age, false, sel);
+      email = await buildEmailFor(person, false, sel);
     }
 
     document.getElementById('emailBox').textContent = email.trim();
-    document.getElementById('outName').textContent = name;
-    document.getElementById('outAgeLabel').textContent = `AGE ${age}`;
-    document.getElementById('instName').textContent = name;
-
-    const headerEl = document.getElementById('outHeader');
-    const nameEl = document.getElementById('outName');
-    headerEl.classList.remove('noah', 'emily');
-    nameEl.classList.remove('noah', 'emily');
-    headerEl.classList.add(person);
-    nameEl.classList.add(person);
+    document.getElementById('outName').textContent = person.name;
+    document.getElementById('outAgeLabel').textContent = `AGE ${person.age}`;
+    document.getElementById('instName').textContent = person.name;
 
     loading.classList.remove('on');
     output.classList.add('on');
