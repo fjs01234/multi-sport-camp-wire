@@ -18,6 +18,8 @@
   .subtitle { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--orange); letter-spacing:4px; text-transform:uppercase; margin-top:6px; }
   .dateline { text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:rgba(248,244,239,.4); margin-bottom:28px; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
   .dot { width:6px; height:6px; border-radius:50%; background:#4ade80; animation:pulse 2s infinite; flex-shrink:0; }
+  .settings-link { display:inline-block; margin-bottom:18px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:rgba(248,244,239,.6); text-decoration:none; border:1px solid rgba(255,255,255,.2); padding:8px 16px; border-radius:4px; transition:all .2s; }
+  .settings-link:hover { border-color:var(--orange); color:var(--orange); }
 
   .settings { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:20px; margin-bottom:24px; }
   .settings-title { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:3px; color:rgba(248,244,239,.5); text-transform:uppercase; margin-bottom:16px; }
@@ -32,15 +34,6 @@
   select { width:100%; padding:10px; margin-bottom:8px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.2); color:var(--white); border-radius:4px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
   select:last-child { margin-bottom:0; }
   input[type="text"], input[type="number"] { width:100%; padding:10px; margin-bottom:8px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.2); color:var(--white); border-radius:4px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
-  .people-list { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
-  .person-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:5px; }
-  .person-row-info { font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
-  .person-row-name { font-weight:600; color:var(--white); }
-  .person-row-meta { color:rgba(248,244,239,.5); font-size:11px; margin-top:2px; }
-  .person-row-edit { background:transparent; border:1px solid rgba(255,255,255,.2); color:rgba(255,255,255,.6); border-radius:3px; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
-  .person-row-edit:hover { border-color:var(--orange); color:var(--orange); }
-  .person-form { display:none; }
-  .person-form.on { display:block; }
   .save-row { display:flex; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap; }
   .save-btn { padding:10px 22px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); color:var(--white); border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:1px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
   .save-btn:hover { border-color:var(--orange); color:var(--orange); }
@@ -100,33 +93,7 @@
     <span>·</span><span>Live ESPN Data</span>
   </div>
 
-  <div class="settings">
-    <div class="settings-title">Manage People</div>
-    <div id="peopleList" class="people-list"></div>
-    <button class="save-btn" id="addPersonBtn" onclick="openPersonForm(null)">+ Add Person</button>
-
-    <div id="personForm" class="person-form">
-      <div class="settings-title" id="formTitle" style="margin-top:18px;">Add Person</div>
-      <input type="text" id="formName" placeholder="Name" />
-      <input type="number" id="formAge" placeholder="Age" min="1" max="99" />
-      <select id="formGender">
-        <option value="">Gender (for pronouns in AI email)</option>
-        <option value="male">Male (he/him)</option>
-        <option value="female">Female (she/her)</option>
-        <option value="other">Other (they/them)</option>
-      </select>
-      <select id="formTone">
-        <option value="teen_stats">Teen Stats Nerd -- real terminology, dry humor, no hype</option>
-        <option value="young_enthusiastic">Young &amp; Enthusiastic -- warm, simple, upbeat</option>
-        <option value="casual_fan">Casual Fan -- friendly, easygoing, hits the highlights</option>
-      </select>
-      <div class="save-row">
-        <button class="save-btn" onclick="savePersonForm()">Save Person</button>
-        <button class="save-btn" id="deletePersonBtn" onclick="deleteCurrentPerson()" style="display:none; border-color:#ff5050; color:#ff8080;">Delete</button>
-        <button class="save-btn" onclick="closePersonForm()">Cancel</button>
-      </div>
-    </div>
-  </div>
+  <a class="settings-link" href="/settings.html">⚙️ Manage People</a>
 
   <div class="settings">
     <div class="settings-title">Who's this email for?</div>
@@ -143,6 +110,7 @@
       <span class="save-status" id="saveStatus">Saved ✓</span>
     </div>
   </div>
+
 
   <label class="ai-toggle">
     <input type="checkbox" id="useAI">
@@ -188,13 +156,6 @@ const LEAGUES = [
 
 let teamCache = {};
 let people = [];          // [{id, name, age, gender, tonePreset, sport, league, teamId, teamAbbr, teamName}]
-let editingPersonId = null; // null = adding new, otherwise editing this id
-
-const TONE_LABELS = {
-  teen_stats: 'Teen Stats Nerd',
-  young_enthusiastic: 'Young & Enthusiastic',
-  casual_fan: 'Casual Fan'
-};
 
 function setDate() {
   const d = new Date();
@@ -237,22 +198,8 @@ async function loadPreferences() {
   ];
 
   populateLeagueSelect(document.getElementById('leagueSelect'));
-  renderPeopleList();
   renderPersonSelect();
   await loadPersonIntoPickers(currentPerson().id);
-}
-
-function renderPeopleList() {
-  const el = document.getElementById('peopleList');
-  el.innerHTML = people.map(p => `
-    <div class="person-row">
-      <div class="person-row-info">
-        <div class="person-row-name">${p.name}</div>
-        <div class="person-row-meta">Age ${p.age} -- ${TONE_LABELS[p.tonePreset] || p.tonePreset}</div>
-      </div>
-      <button class="person-row-edit" onclick="openPersonForm('${p.id}')">Edit</button>
-    </div>
-  `).join('');
 }
 
 function renderPersonSelect() {
@@ -319,83 +266,9 @@ async function saveTeamPick() {
   if (idx >= 0) people[idx] = { ...people[idx], ...teamSel };
   const ok = await persistPeople();
   if (ok) {
-    renderPeopleList();
     const statusEl = document.getElementById('saveStatus');
     statusEl.classList.add('on');
     setTimeout(() => statusEl.classList.remove('on'), 2000);
-  }
-}
-
-function openPersonForm(personId) {
-  editingPersonId = personId;
-  const form = document.getElementById('personForm');
-  const title = document.getElementById('formTitle');
-  const deleteBtn = document.getElementById('deletePersonBtn');
-
-  if (personId) {
-    const p = people.find(x => x.id === personId);
-    title.textContent = `Edit ${p.name}`;
-    document.getElementById('formName').value = p.name;
-    document.getElementById('formAge').value = p.age;
-    document.getElementById('formGender').value = p.gender || '';
-    document.getElementById('formTone').value = p.tonePreset || 'casual_fan';
-    deleteBtn.style.display = people.length > 1 ? 'inline-block' : 'none';
-  } else {
-    title.textContent = 'Add Person';
-    document.getElementById('formName').value = '';
-    document.getElementById('formAge').value = '';
-    document.getElementById('formGender').value = '';
-    document.getElementById('formTone').value = 'casual_fan';
-    deleteBtn.style.display = 'none';
-  }
-  form.classList.add('on');
-}
-
-function closePersonForm() {
-  document.getElementById('personForm').classList.remove('on');
-  editingPersonId = null;
-}
-
-async function savePersonForm() {
-  const name = document.getElementById('formName').value.trim();
-  const age = parseInt(document.getElementById('formAge').value, 10);
-  const gender = document.getElementById('formGender').value;
-  const tonePreset = document.getElementById('formTone').value;
-
-  if (!name || !age) { alert('Please enter a name and age.'); return; }
-
-  if (editingPersonId) {
-    const idx = people.findIndex(p => p.id === editingPersonId);
-    if (idx >= 0) people[idx] = { ...people[idx], name, age, gender, tonePreset };
-  } else {
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36);
-    people.push({
-      id, name, age, gender, tonePreset,
-      sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets'
-    });
-  }
-
-  const ok = await persistPeople();
-  if (ok) {
-    closePersonForm();
-    renderPeopleList();
-    renderPersonSelect();
-    await loadPersonIntoPickers(editingPersonId || people[people.length - 1].id);
-  }
-}
-
-async function deleteCurrentPerson() {
-  if (!editingPersonId) return;
-  if (people.length <= 1) { alert('You need at least one person.'); return; }
-  if (!confirm('Delete this person?')) return;
-
-  people = people.filter(p => p.id !== editingPersonId);
-  const ok = await persistPeople();
-  if (ok) {
-    closePersonForm();
-    renderPeopleList();
-    renderPersonSelect();
-    await loadPersonIntoPickers(people[0].id);
   }
 }
 
