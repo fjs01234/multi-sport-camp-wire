@@ -19,6 +19,8 @@
   .dateline { text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:rgba(248,244,239,.4); margin-bottom:28px; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
   .dot { width:6px; height:6px; border-radius:50%; background:#4ade80; animation:pulse 2s infinite; flex-shrink:0; }
   .settings-link { display:inline-block; margin-bottom:18px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:rgba(248,244,239,.6); text-decoration:none; border:1px solid rgba(255,255,255,.2); padding:8px 16px; border-radius:4px; transition:all .2s; }
+  .teams-empty-hint { font-family:'IBM Plex Mono',monospace; font-size:11px; color:rgba(248,244,239,.5); margin-top:8px; line-height:1.6; }
+  .teams-empty-hint a { color:#6b9dff; }
   .settings-link:hover { border-color:var(--orange); color:var(--orange); }
 
   .settings { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:20px; margin-bottom:24px; }
@@ -99,16 +101,9 @@
     <div class="settings-title">Who's this email for?</div>
     <select id="personSelect" onchange="onPersonChange()"></select>
 
-    <div class="settings-title" style="margin-top:18px;">League</div>
-    <select id="leagueSelect" onchange="onLeagueChange()"></select>
-
-    <div class="settings-title" style="margin-top:18px;">Team</div>
-    <select id="teamSelect"></select>
-
-    <div class="save-row">
-      <button class="save-btn" onclick="saveTeamPick()">Save Team Pick for <span id="saveLabel">Noah</span></button>
-      <span class="save-status" id="saveStatus">Saved ✓</span>
-    </div>
+    <div class="settings-title" style="margin-top:18px;">Which team?</div>
+    <select id="teamSelect" onchange="onTeamChange()"></select>
+    <div class="teams-empty-hint" id="noTeamsHint" style="display:none;">No teams saved for this person yet -- add some on the <a href="/settings.html">Manage People</a> page.</div>
   </div>
 
 
@@ -147,15 +142,7 @@ const PROXY = '/api/proxy';
 const GENERATE = '/api/generate';
 const PREFERENCES = '/api/preferences';
 
-const LEAGUES = [
-  { sport: 'baseball', league: 'mlb', label: 'MLB' },
-  { sport: 'basketball', league: 'nba', label: 'NBA' },
-  { sport: 'football', league: 'nfl', label: 'NFL' }
-];
-
-
-let teamCache = {};
-let people = [];          // [{id, name, age, gender, tonePreset, sport, league, teamId, teamAbbr, teamName}]
+let people = [];          // [{id, name, age, gender, tonePreset, teams: [{sport, league, teamId, teamAbbr, teamName}]}]
 
 function setDate() {
   const d = new Date();
@@ -166,23 +153,8 @@ async function fetchJSON(url, opts) {
   try { const r = await fetch(url, opts); if (!r.ok) return null; return await r.json(); } catch { return null; }
 }
 
-async function loadTeams(sport, league) {
-  const key = `${sport}/${league}`;
-  if (teamCache[key]) return teamCache[key];
-  const data = await fetchJSON(`${PROXY}/teams/${sport}/${league}`);
-  const teams = data?.teams || [];
-  teamCache[key] = teams;
-  return teams;
-}
-
-function populateLeagueSelect(selectEl) {
-  selectEl.innerHTML = LEAGUES.map(l => `<option value="${l.sport}/${l.league}">${l.label}</option>`).join('');
-}
-
-async function populateTeamSelect(teamSelectEl, sport, league, selectedTeamId) {
-  const teams = await loadTeams(sport, league);
-  teamSelectEl.innerHTML = teams.map(t => `<option value="${t.id}" data-abbr="${t.abbr}" data-name="${t.name}">${t.name}</option>`).join('');
-  if (selectedTeamId) teamSelectEl.value = selectedTeamId;
+function defaultTeams() {
+  return [{ sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }];
 }
 
 function currentPerson() {
@@ -193,13 +165,20 @@ function currentPerson() {
 async function loadPreferences() {
   const data = await fetchJSON(PREFERENCES);
   people = (data && Array.isArray(data.people) && data.people.length) ? data.people : [
-    { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' },
-    { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }
+    { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', teams: defaultTeams() },
+    { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', teams: defaultTeams() }
   ];
+  // Migrate old single-team shape if present
+  people = people.map(p => {
+    if (!Array.isArray(p.teams)) {
+      const { sport, league, teamId, teamAbbr, teamName, ...rest } = p;
+      return { ...rest, teams: (sport && teamId) ? [{ sport, league, teamId, teamAbbr, teamName }] : defaultTeams() };
+    }
+    return p;
+  });
 
-  populateLeagueSelect(document.getElementById('leagueSelect'));
   renderPersonSelect();
-  await loadPersonIntoPickers(currentPerson().id);
+  loadPersonIntoPickers(currentPerson().id);
 }
 
 function renderPersonSelect() {
@@ -209,67 +188,51 @@ function renderPersonSelect() {
   if (people.some(p => p.id === prevValue)) sel.value = prevValue;
 }
 
-async function loadPersonIntoPickers(personId) {
+function renderTeamSelect(person) {
+  const teamSel = document.getElementById('teamSelect');
+  const hint = document.getElementById('noTeamsHint');
+  const teams = person.teams || [];
+
+  if (!teams.length) {
+    teamSel.innerHTML = '';
+    teamSel.style.display = 'none';
+    hint.style.display = 'block';
+    return;
+  }
+
+  teamSel.style.display = '';
+  hint.style.display = 'none';
+  teamSel.innerHTML = teams.map((t, i) => `<option value="${i}" data-sport="${t.sport}" data-league="${t.league}" data-teamid="${t.teamId}" data-abbr="${t.teamAbbr}" data-name="${t.teamName}">${t.teamName} (${(t.league || '').toUpperCase()})</option>`).join('');
+}
+
+function loadPersonIntoPickers(personId) {
   const person = people.find(p => p.id === personId) || people[0];
   document.getElementById('personSelect').value = person.id;
-  const leagueSel = document.getElementById('leagueSelect');
-  const teamSel = document.getElementById('teamSelect');
-  leagueSel.value = `${person.sport}/${person.league}`;
-  await populateTeamSelect(teamSel, person.sport, person.league, person.teamId);
+  renderTeamSelect(person);
   updateLabels();
 }
 
 function updateLabels() {
   const p = currentPerson();
-  document.getElementById('saveLabel').textContent = p.name;
   document.getElementById('genLabel').textContent = `${p.name}'s`;
 }
 
-async function onPersonChange() {
-  await loadPersonIntoPickers(currentPerson().id);
+function onPersonChange() {
+  loadPersonIntoPickers(currentPerson().id);
 }
 
-async function onLeagueChange() {
-  const leagueSel = document.getElementById('leagueSelect');
-  const teamSel = document.getElementById('teamSelect');
-  const [sport, league] = leagueSel.value.split('/');
-  await populateTeamSelect(teamSel, sport, league, null);
+function onTeamChange() {
+  // no-op hook reserved in case future logic needs to react to team switches
 }
 
 function readCurrentTeamSelection() {
-  const leagueSel = document.getElementById('leagueSelect');
   const teamSel = document.getElementById('teamSelect');
-  const [sport, league] = leagueSel.value.split('/');
   const opt = teamSel.options[teamSel.selectedIndex];
+  if (!opt) return null;
   return {
-    sport, league,
-    teamId: teamSel.value,
-    teamAbbr: opt?.dataset.abbr || '',
-    teamName: opt?.dataset.name || ''
+    sport: opt.dataset.sport, league: opt.dataset.league,
+    teamId: opt.dataset.teamid, teamAbbr: opt.dataset.abbr, teamName: opt.dataset.name
   };
-}
-
-async function persistPeople() {
-  const res = await fetchJSON(PREFERENCES, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ people })
-  });
-  if (res?.people) people = res.people;
-  return !!res;
-}
-
-async function saveTeamPick() {
-  const person = currentPerson();
-  const teamSel = readCurrentTeamSelection();
-  const idx = people.findIndex(p => p.id === person.id);
-  if (idx >= 0) people[idx] = { ...people[idx], ...teamSel };
-  const ok = await persistPeople();
-  if (ok) {
-    const statusEl = document.getElementById('saveStatus');
-    statusEl.classList.add('on');
-    setTimeout(() => statusEl.classList.remove('on'), 2000);
-  }
 }
 
 
@@ -670,6 +633,14 @@ async function go() {
 
   const person = currentPerson();
   const sel = readCurrentTeamSelection();
+
+  if (!sel) {
+    loading.classList.remove('on');
+    errEl.textContent = `${person.name} doesn't have any teams saved yet. Add one on the Manage People page.`;
+    errEl.classList.add('on');
+    btn.disabled = false;
+    return;
+  }
 
   try {
     const useAI = document.getElementById('useAI')?.checked;
