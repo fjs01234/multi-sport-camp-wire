@@ -48,8 +48,7 @@
   .loading-sub { font-family:'IBM Plex Mono',monospace; font-size:12px; color:rgba(248,244,239,.4); animation:blink 1.2s infinite; }
   .err { display:none; background:rgba(255,50,50,.1); border:1px solid rgba(255,50,50,.3); border-radius:4px; padding:18px; text-align:center; color:#ff8080; font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.6; margin-top:12px; }
   .err.on { display:block; }
-  .emails-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-  @media(max-width:640px){ .emails-grid { grid-template-columns:1fr; } }
+  .single-card { max-width:600px; margin:0 auto; }
   .email-card { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.1); border-radius:6px; overflow:hidden; }
   .email-card-header { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; }
   .email-card-header.noah { background:rgba(0,45,114,.4); border-bottom:2px solid var(--blue); }
@@ -92,58 +91,48 @@
   </div>
 
   <div class="settings">
-    <div class="settings-title">Team Settings</div>
-    <div class="settings-grid">
-      <div class="kid-settings noah">
-        <div class="kid-label noah">Noah</div>
-        <select id="noahLeague" onchange="onLeagueChange('noah')"></select>
-        <select id="noahTeam"></select>
-      </div>
-      <div class="kid-settings emily">
-        <div class="kid-label emily">Emily</div>
-        <select id="emilyLeague" onchange="onLeagueChange('emily')"></select>
-        <select id="emilyTeam"></select>
-      </div>
-    </div>
+    <div class="settings-title">Who's this email for?</div>
+    <select id="personSelect" onchange="onPersonChange()">
+      <option value="noah">Noah</option>
+      <option value="emily">Emily</option>
+    </select>
+
+    <div class="settings-title" style="margin-top:18px;">League</div>
+    <select id="leagueSelect" onchange="onLeagueChange()"></select>
+
+    <div class="settings-title" style="margin-top:18px;">Team</div>
+    <select id="teamSelect"></select>
+
     <div class="save-row">
-      <button class="save-btn" onclick="savePreferences()">Save Team Picks</button>
+      <button class="save-btn" onclick="savePreferences()">Save Pick for <span id="saveLabel">Noah</span></button>
       <span class="save-status" id="saveStatus">Saved ✓</span>
     </div>
   </div>
 
   <label class="ai-toggle">
     <input type="checkbox" id="useAI">
-    <span>Write emails with AI (slower, more natural -- stats &amp; scores stay exact either way)</span>
+    <span>Write with AI -- a more natural, varied recap instead of the fixed wording below. Scores &amp; stats stay exact either way.</span>
   </label>
-  <button class="btn" id="genBtn" onclick="go()">🏆 Generate Today's Emails</button>
+  <button class="btn" id="genBtn" onclick="go()">🏆 Generate <span id="genLabel">Noah's</span> Email</button>
   <div class="loading" id="loading">
     <div class="loading-title">Checking the scoreboard...</div>
     <div class="loading-sub">Fetching scores, stats &amp; news...</div>
   </div>
   <div class="err" id="err"></div>
   <div class="output" id="output">
-    <div class="emails-grid">
-      <div class="email-card">
-        <div class="email-card-header noah">
-          <div><div class="card-name noah">Noah</div><div class="card-age" id="noahAgeLabel">AGE 15</div></div>
-          <button class="copy-btn" id="copyNoah" onclick="copyIt('noahBox','copyNoah')">Copy</button>
-        </div>
-        <div class="email-box" id="noahBox"></div>
+    <div class="email-card single-card">
+      <div class="email-card-header" id="outHeader">
+        <div><div class="card-name" id="outName">Noah</div><div class="card-age" id="outAgeLabel">AGE 15</div></div>
+        <button class="copy-btn" id="copyBtn" onclick="copyIt('emailBox','copyBtn')">Copy</button>
       </div>
-      <div class="email-card">
-        <div class="email-card-header emily">
-          <div><div class="card-name emily">Emily</div><div class="card-age" id="emilyAgeLabel">AGE 12</div></div>
-          <button class="copy-btn" id="copyEmily" onclick="copyIt('emilyBox','copyEmily')">Copy</button>
-        </div>
-        <div class="email-box" id="emilyBox"></div>
-      </div>
+      <div class="email-box" id="emailBox"></div>
     </div>
     <div class="instructions">
       <div class="inst-title">How to send</div>
       <ol>
-        <li>Click <strong>Copy</strong> on each email above</li>
+        <li>Click <strong>Copy</strong> above</li>
         <li>Paste into your camp's email portal</li>
-        <li>Send Noah's email to Noah, Emily's email to Emily</li>
+        <li>Send to <span id="instName">Noah</span></li>
       </ol>
     </div>
     <div class="regen"><button class="regen-btn" onclick="go()">↻ Regenerate</button></div>
@@ -194,11 +183,16 @@ async function populateTeamSelect(teamSelectEl, sport, league, selectedTeamId) {
   if (selectedTeamId) teamSelectEl.value = selectedTeamId;
 }
 
-async function onLeagueChange(kid) {
-  const leagueSel = document.getElementById(`${kid}League`);
-  const teamSel = document.getElementById(`${kid}Team`);
-  const [sport, league] = leagueSel.value.split('/');
-  await populateTeamSelect(teamSel, sport, league, null);
+function currentPerson() {
+  return document.getElementById('personSelect').value; // 'noah' or 'emily'
+}
+
+function personLabel(p) {
+  return p === 'emily' ? 'Emily' : 'Noah';
+}
+
+function personAge(p) {
+  return p === 'emily' ? EMILY_AGE : NOAH_AGE;
 }
 
 async function loadPreferences() {
@@ -208,26 +202,40 @@ async function loadPreferences() {
     emily: { sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }
   };
 
-  const noahLeagueSel = document.getElementById('noahLeague');
-  const emilyLeagueSel = document.getElementById('emilyLeague');
-  populateLeagueSelect(noahLeagueSel);
-  populateLeagueSelect(emilyLeagueSel);
-
-  noahLeagueSel.value = `${preferences.noah.sport}/${preferences.noah.league}`;
-  emilyLeagueSel.value = `${preferences.emily.sport}/${preferences.emily.league}`;
-
-  await Promise.all([
-    populateTeamSelect(document.getElementById('noahTeam'), preferences.noah.sport, preferences.noah.league, preferences.noah.teamId),
-    populateTeamSelect(document.getElementById('emilyTeam'), preferences.emily.sport, preferences.emily.league, preferences.emily.teamId)
-  ]);
-
-  document.getElementById('noahAgeLabel').textContent = `AGE ${NOAH_AGE}`;
-  document.getElementById('emilyAgeLabel').textContent = `AGE ${EMILY_AGE}`;
+  populateLeagueSelect(document.getElementById('leagueSelect'));
+  await loadPersonIntoPickers(currentPerson());
 }
 
-function readKidSelection(kid) {
-  const leagueSel = document.getElementById(`${kid}League`);
-  const teamSel = document.getElementById(`${kid}Team`);
+async function loadPersonIntoPickers(person) {
+  const sel = preferences[person];
+  const leagueSel = document.getElementById('leagueSelect');
+  const teamSel = document.getElementById('teamSelect');
+  leagueSel.value = `${sel.sport}/${sel.league}`;
+  await populateTeamSelect(teamSel, sel.sport, sel.league, sel.teamId);
+  updateLabels();
+}
+
+function updateLabels() {
+  const p = currentPerson();
+  const name = personLabel(p);
+  document.getElementById('saveLabel').textContent = name;
+  document.getElementById('genLabel').textContent = `${name}'s`;
+}
+
+async function onPersonChange() {
+  await loadPersonIntoPickers(currentPerson());
+}
+
+async function onLeagueChange() {
+  const leagueSel = document.getElementById('leagueSelect');
+  const teamSel = document.getElementById('teamSelect');
+  const [sport, league] = leagueSel.value.split('/');
+  await populateTeamSelect(teamSel, sport, league, null);
+}
+
+function readCurrentSelection() {
+  const leagueSel = document.getElementById('leagueSelect');
+  const teamSel = document.getElementById('teamSelect');
   const [sport, league] = leagueSel.value.split('/');
   const opt = teamSel.options[teamSel.selectedIndex];
   return {
@@ -239,12 +247,12 @@ function readKidSelection(kid) {
 }
 
 async function savePreferences() {
-  const noah = readKidSelection('noah');
-  const emily = readKidSelection('emily');
+  const person = currentPerson();
+  const updated = { ...preferences, [person]: readCurrentSelection() };
   const res = await fetchJSON(PREFERENCES, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ noah, emily })
+    body: JSON.stringify(updated)
   });
   if (res) {
     preferences = res;
@@ -253,6 +261,7 @@ async function savePreferences() {
     setTimeout(() => statusEl.classList.remove('on'), 2000);
   }
 }
+
 
 async function findTeamGame(sport, league, teamId, teamAbbr) {
   const today = new Date();
@@ -601,8 +610,7 @@ async function buildAIEmail(kid, sel, g, detail, articles, age, injuryData) {
   return body;
 }
 
-async function buildEmailFor(kid, age, useAI) {
-  const sel = readKidSelection(kid);
+async function buildEmailFor(kid, age, useAI, sel) {
   const game = await findTeamGame(sel.sport, sel.league, sel.teamId, sel.teamAbbr);
   const g = parseGame(game, sel.teamId);
 
@@ -633,38 +641,44 @@ async function go() {
   output.classList.remove('on');
   errEl.classList.remove('on');
 
+  const person = currentPerson();
+  const age = personAge(person);
+  const name = personLabel(person);
+  const sel = readCurrentSelection();
+
   try {
     const useAI = document.getElementById('useAI')?.checked;
-    let noahEmail, emilyEmail, aiFailed = false, aiErrorMsg = '';
+    let email, aiFailed = false, aiErrorMsg = '';
 
     if (useAI) {
       try {
-        [noahEmail, emilyEmail] = await Promise.all([
-          buildEmailFor('noah', NOAH_AGE, true),
-          buildEmailFor('emily', EMILY_AGE, true)
-        ]);
+        email = await buildEmailFor(person, age, true, sel);
       } catch (aiErr) {
-        console.error('AI generation failed, falling back to templates:', aiErr);
+        console.error('AI generation failed, falling back to template:', aiErr);
         aiFailed = true;
         aiErrorMsg = aiErr?.message || String(aiErr);
-        [noahEmail, emilyEmail] = await Promise.all([
-          buildEmailFor('noah', NOAH_AGE, false),
-          buildEmailFor('emily', EMILY_AGE, false)
-        ]);
+        email = await buildEmailFor(person, age, false, sel);
       }
     } else {
-      [noahEmail, emilyEmail] = await Promise.all([
-        buildEmailFor('noah', NOAH_AGE, false),
-        buildEmailFor('emily', EMILY_AGE, false)
-      ]);
+      email = await buildEmailFor(person, age, false, sel);
     }
 
-    document.getElementById('noahBox').textContent = noahEmail.trim();
-    document.getElementById('emilyBox').textContent = emilyEmail.trim();
+    document.getElementById('emailBox').textContent = email.trim();
+    document.getElementById('outName').textContent = name;
+    document.getElementById('outAgeLabel').textContent = `AGE ${age}`;
+    document.getElementById('instName').textContent = name;
+
+    const headerEl = document.getElementById('outHeader');
+    const nameEl = document.getElementById('outName');
+    headerEl.classList.remove('noah', 'emily');
+    nameEl.classList.remove('noah', 'emily');
+    headerEl.classList.add(person);
+    nameEl.classList.add(person);
+
     loading.classList.remove('on');
     output.classList.add('on');
     if (aiFailed) {
-      errEl.textContent = `AI writing failed, used the regular templates instead. Details: ${aiErrorMsg}`;
+      errEl.textContent = `AI writing failed, used the regular template instead. Details: ${aiErrorMsg}`;
       errEl.classList.add('on');
     }
   } catch(e) {
