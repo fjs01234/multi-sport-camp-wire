@@ -37,6 +37,13 @@
   .person-form { display:none; }
   .person-form.on { display:block; }
 
+  .teams-list { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .team-chip { display:flex; align-items:center; gap:8px; padding:6px 10px; background:rgba(255,89,16,.12); border:1px solid rgba(255,89,16,.4); border-radius:20px; font-family:'IBM Plex Sans',sans-serif; font-size:12px; }
+  .team-chip-remove { cursor:pointer; color:rgba(248,244,239,.5); font-weight:700; }
+  .team-chip-remove:hover { color:#ff8080; }
+  .teams-empty { font-family:'IBM Plex Mono',monospace; font-size:11px; color:rgba(248,244,239,.4); margin-bottom:12px; }
+  .add-team-row { padding:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.1); border-radius:5px; margin-bottom:16px; }
+  .add-team-row select[multiple] { height:140px; }
   .save-row { display:flex; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap; }
   .save-btn { padding:10px 22px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); color:var(--white); border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:1px; cursor:pointer; text-transform:uppercase; transition:all .2s; }
   .save-btn:hover { border-color:var(--orange); color:var(--orange); }
@@ -77,6 +84,16 @@
         <option value="young_enthusiastic">Young &amp; Enthusiastic -- warm, simple, upbeat</option>
         <option value="casual_fan">Casual Fan -- friendly, easygoing, hits the highlights</option>
       </select>
+
+      <div class="settings-title" style="margin-top:18px;">Teams They Follow</div>
+      <div id="formTeamsList" class="teams-list"></div>
+
+      <div class="add-team-row">
+        <select id="formLeague" onchange="onFormLeagueChange()"></select>
+        <select id="formTeamMulti" multiple size="6"></select>
+        <button class="save-btn" onclick="addSelectedTeams()" type="button">+ Add Selected Team(s)</button>
+      </div>
+
       <div class="save-row">
         <button class="save-btn" onclick="savePersonForm()">Save Person</button>
         <button class="save-btn" id="deletePersonBtn" onclick="deleteCurrentPerson()" style="display:none; border-color:#ff5050; color:#ff8080;">Delete</button>
@@ -89,8 +106,18 @@
 
 <script>
 const PREFERENCES = '/api/preferences';
+const PROXY = '/api/proxy';
+
+const LEAGUES = [
+  { sport: 'baseball', league: 'mlb', label: 'MLB' },
+  { sport: 'basketball', league: 'nba', label: 'NBA' },
+  { sport: 'football', league: 'nfl', label: 'NFL' }
+];
+
 let people = [];
 let editingPersonId = null;
+let currentFormTeams = []; // working list of teams while the form is open: [{sport, league, teamId, teamAbbr, teamName}]
+let teamCache = {};
 
 const TONE_LABELS = {
   teen_stats: 'Teen Stats Nerd',
@@ -98,30 +125,109 @@ const TONE_LABELS = {
   casual_fan: 'Casual Fan'
 };
 
+const LEAGUE_LABELS = { mlb: 'MLB', nba: 'NBA', nfl: 'NFL' };
+
 async function fetchJSON(url, opts) {
   try { const r = await fetch(url, opts); if (!r.ok) return null; return await r.json(); } catch { return null; }
+}
+
+function defaultTeams() {
+  return [{ sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }];
 }
 
 async function loadPeople() {
   const data = await fetchJSON(PREFERENCES);
   people = (data && Array.isArray(data.people) && data.people.length) ? data.people : [
-    { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' },
-    { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets' }
+    { id: 'noah', name: 'Noah', age: 15, gender: 'male', tonePreset: 'teen_stats', teams: defaultTeams() },
+    { id: 'emily', name: 'Emily', age: 12, gender: 'female', tonePreset: 'young_enthusiastic', teams: defaultTeams() }
   ];
+  // Migrate old single-team shape if present
+  people = people.map(p => {
+    if (!Array.isArray(p.teams)) {
+      const { sport, league, teamId, teamAbbr, teamName, ...rest } = p;
+      return { ...rest, teams: (sport && teamId) ? [{ sport, league, teamId, teamAbbr, teamName }] : defaultTeams() };
+    }
+    return p;
+  });
+  populateLeagueSelect(document.getElementById('formLeague'));
   renderPeopleList();
+}
+
+function populateLeagueSelect(selectEl) {
+  selectEl.innerHTML = LEAGUES.map(l => `<option value="${l.sport}/${l.league}">${l.label}</option>`).join('');
+}
+
+async function loadTeams(sport, league) {
+  const key = `${sport}/${league}`;
+  if (teamCache[key]) return teamCache[key];
+  const data = await fetchJSON(`${PROXY}/teams/${sport}/${league}`);
+  const teams = data?.teams || [];
+  teamCache[key] = teams;
+  return teams;
+}
+
+async function populateFormTeamMulti() {
+  const leagueSel = document.getElementById('formLeague');
+  const [sport, league] = leagueSel.value.split('/');
+  const teams = await loadTeams(sport, league);
+  const multiSel = document.getElementById('formTeamMulti');
+  multiSel.innerHTML = teams.map(t => `<option value="${t.id}" data-sport="${sport}" data-league="${league}" data-abbr="${t.abbr}" data-name="${t.name}">${t.name}</option>`).join('');
+}
+
+async function onFormLeagueChange() {
+  await populateFormTeamMulti();
+}
+
+function addSelectedTeams() {
+  const multiSel = document.getElementById('formTeamMulti');
+  const selected = Array.from(multiSel.selectedOptions);
+  if (!selected.length) return;
+
+  selected.forEach(opt => {
+    const team = {
+      sport: opt.dataset.sport, league: opt.dataset.league,
+      teamId: opt.value, teamAbbr: opt.dataset.abbr, teamName: opt.dataset.name
+    };
+    const exists = currentFormTeams.some(t => t.sport === team.sport && t.league === team.league && t.teamId === team.teamId);
+    if (!exists) currentFormTeams.push(team);
+  });
+
+  renderFormTeamsList();
+}
+
+function removeFormTeam(sport, league, teamId) {
+  currentFormTeams = currentFormTeams.filter(t => !(t.sport === sport && t.league === league && t.teamId === teamId));
+  renderFormTeamsList();
+}
+
+function renderFormTeamsList() {
+  const el = document.getElementById('formTeamsList');
+  if (!currentFormTeams.length) {
+    el.innerHTML = `<div class="teams-empty">No teams added yet -- pick a league and team below, then click Add.</div>`;
+    return;
+  }
+  el.innerHTML = currentFormTeams.map(t => `
+    <div class="team-chip">
+      <span>${t.teamName} (${LEAGUE_LABELS[t.league] || t.league.toUpperCase()})</span>
+      <span class="team-chip-remove" onclick="removeFormTeam('${t.sport}','${t.league}','${t.teamId}')">&times;</span>
+    </div>
+  `).join('');
 }
 
 function renderPeopleList() {
   const el = document.getElementById('peopleList');
-  el.innerHTML = people.map(p => `
+  el.innerHTML = people.map(p => {
+    const teamSummary = (p.teams || []).map(t => t.teamName).join(', ') || 'No teams yet';
+    return `
     <div class="person-row">
       <div class="person-row-info">
         <div class="person-row-name">${p.name}</div>
-        <div class="person-row-meta">Age ${p.age} -- ${TONE_LABELS[p.tonePreset] || p.tonePreset}${p.teamName ? ' -- ' + p.teamName : ''}</div>
+        <div class="person-row-meta">Age ${p.age} -- ${TONE_LABELS[p.tonePreset] || p.tonePreset} -- ${teamSummary}</div>
       </div>
       <button class="person-row-edit" onclick="openPersonForm('${p.id}')">Edit</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 async function persistPeople() {
@@ -134,7 +240,7 @@ async function persistPeople() {
   return !!res;
 }
 
-function openPersonForm(personId) {
+async function openPersonForm(personId) {
   editingPersonId = personId;
   const form = document.getElementById('personForm');
   const title = document.getElementById('formTitle');
@@ -147,6 +253,7 @@ function openPersonForm(personId) {
     document.getElementById('formAge').value = p.age;
     document.getElementById('formGender').value = p.gender || '';
     document.getElementById('formTone').value = p.tonePreset || 'casual_fan';
+    currentFormTeams = JSON.parse(JSON.stringify(p.teams || []));
     deleteBtn.style.display = people.length > 1 ? 'inline-block' : 'none';
   } else {
     title.textContent = 'Add Person';
@@ -154,14 +261,18 @@ function openPersonForm(personId) {
     document.getElementById('formAge').value = '';
     document.getElementById('formGender').value = '';
     document.getElementById('formTone').value = 'casual_fan';
+    currentFormTeams = [];
     deleteBtn.style.display = 'none';
   }
+  renderFormTeamsList();
+  await populateFormTeamMulti();
   form.classList.add('on');
 }
 
 function closePersonForm() {
   document.getElementById('personForm').classList.remove('on');
   editingPersonId = null;
+  currentFormTeams = [];
 }
 
 async function savePersonForm() {
@@ -171,16 +282,16 @@ async function savePersonForm() {
   const tonePreset = document.getElementById('formTone').value;
 
   if (!name || !age) { alert('Please enter a name and age.'); return; }
+  if (!currentFormTeams.length) { alert('Please add at least one team.'); return; }
+
+  const teams = JSON.parse(JSON.stringify(currentFormTeams));
 
   if (editingPersonId) {
     const idx = people.findIndex(p => p.id === editingPersonId);
-    if (idx >= 0) people[idx] = { ...people[idx], name, age, gender, tonePreset };
+    if (idx >= 0) people[idx] = { ...people[idx], name, age, gender, tonePreset, teams };
   } else {
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36);
-    people.push({
-      id, name, age, gender, tonePreset,
-      sport: 'baseball', league: 'mlb', teamId: '21', teamAbbr: 'NYM', teamName: 'New York Mets'
-    });
+    people.push({ id, name, age, gender, tonePreset, teams });
   }
 
   const ok = await persistPeople();
