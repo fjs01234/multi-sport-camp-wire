@@ -202,7 +202,12 @@ function renderTeamSelect(person) {
 
   teamSel.style.display = '';
   hint.style.display = 'none';
-  teamSel.innerHTML = teams.map((t, i) => `<option value="${i}" data-sport="${t.sport}" data-league="${t.league}" data-teamid="${t.teamId}" data-abbr="${t.teamAbbr}" data-name="${t.teamName}">${t.teamName} (${(t.league || '').toUpperCase()})</option>`).join('');
+  teamSel.innerHTML = teams.map((t, i) => `<option value="${i}" data-sport="${t.sport}" data-league="${t.league}" data-teamid="${t.teamId}" data-abbr="${t.teamAbbr}" data-name="${t.teamName}">${t.teamName} (${leagueDisplayLabel(t.league)})</option>`).join('');
+}
+
+const SOCCER_LEAGUE_LABELS = { 'eng.1': 'EPL', 'esp.1': 'La Liga', 'ger.1': 'Bundesliga', 'ita.1': 'Serie A', 'usa.1': 'MLS' };
+function leagueDisplayLabel(league) {
+  return SOCCER_LEAGUE_LABELS[league] || (league || '').toUpperCase();
 }
 
 function loadPersonIntoPickers(personId) {
