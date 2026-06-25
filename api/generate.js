@@ -7,7 +7,8 @@ const MODEL = "claude-sonnet-4-6";
 const SPORT_LABELS = {
   baseball: "baseball",
   basketball: "basketball",
-  football: "football"
+  football: "football",
+  soccer: "soccer"
 };
 
 const TONE_VOICES = {
