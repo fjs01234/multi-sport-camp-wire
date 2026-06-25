@@ -111,7 +111,12 @@ const PROXY = '/api/proxy';
 const LEAGUES = [
   { sport: 'baseball', league: 'mlb', label: 'MLB' },
   { sport: 'basketball', league: 'nba', label: 'NBA' },
-  { sport: 'football', league: 'nfl', label: 'NFL' }
+  { sport: 'football', league: 'nfl', label: 'NFL' },
+  { sport: 'soccer', league: 'eng.1', label: 'Premier League' },
+  { sport: 'soccer', league: 'esp.1', label: 'La Liga' },
+  { sport: 'soccer', league: 'ger.1', label: 'Bundesliga' },
+  { sport: 'soccer', league: 'ita.1', label: 'Serie A' },
+  { sport: 'soccer', league: 'usa.1', label: 'MLS' }
 ];
 
 let people = [];
@@ -125,7 +130,10 @@ const TONE_LABELS = {
   casual_fan: 'Casual Fan'
 };
 
-const LEAGUE_LABELS = { mlb: 'MLB', nba: 'NBA', nfl: 'NFL' };
+const LEAGUE_LABELS = {
+  mlb: 'MLB', nba: 'NBA', nfl: 'NFL',
+  'eng.1': 'Premier League', 'esp.1': 'La Liga', 'ger.1': 'Bundesliga', 'ita.1': 'Serie A', 'usa.1': 'MLS'
+};
 
 async function fetchJSON(url, opts) {
   try { const r = await fetch(url, opts); if (!r.ok) return null; return await r.json(); } catch { return null; }
