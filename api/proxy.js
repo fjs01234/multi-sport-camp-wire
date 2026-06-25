@@ -166,7 +166,7 @@ async function handleGameDetail(sport, league, teamId, teamAbbr) {
     const tAbbr = teamBlock?.team?.abbreviation || "";
     const isTracked = tAbbr === teamAbbr || String(teamBlock?.team?.id) === String(teamId);
     const hitters = [], pitchers = []; // baseball-specific naming kept for backward shape compat
-    const skaters = [];                // generic per-player lines for basketball/football
+    const skaters = [];                // generic per-player lines for basketball/football/soccer
 
     for (const statGroup of (teamBlock?.statistics || [])) {
       const type = (statGroup?.type || statGroup?.name || "").toLowerCase();
@@ -265,6 +265,44 @@ async function handleGameDetail(sport, league, teamId, teamAbbr) {
               skaters.push({ name, line });
             }
           }
+        }
+      } else if (sport === 'soccer') {
+        // ESPN soccer boxscore.players[].statistics[] -- key names vary by feed/competition,
+        // so match generically on substring rather than hardcoding exact key strings (which
+        // proved fragile for other sports here). Falls back to teamBoxLines (shots/possession/
+        // corners, already captured generically above) if athlete-level parsing finds nothing.
+        for (const ath of (statGroup?.athletes || [])) {
+          const name = ath?.athlete?.displayName || "";
+          const vals = ath?.stats || [];
+          if (!name || !vals.length) continue;
+          const sm = {};
+          keys.forEach((k, i) => { if (vals[i] != null && vals[i] !== "--" && vals[i] !== "0:00") sm[k] = vals[i]; });
+
+          const findKey = (substr) => {
+            const k = keys.find(kk => kk.toLowerCase().includes(substr));
+            return k ? sm[k] : undefined;
+          };
+
+          const goals = findKey('goal');
+          const assists = findKey('assist');
+          const yellow = findKey('yellow');
+          const red = findKey('red');
+          const shots = findKey('shotsTotal'.toLowerCase()) || findKey('shots');
+
+          const goalsNum = parseInt(goals || "0") || 0;
+          const assistsNum = parseInt(assists || "0") || 0;
+          if (goalsNum <= 0 && assistsNum <= 0 && !yellow && !red) continue; // skip players with no notable line
+
+          let line = `${name}:`;
+          const parts = [];
+          if (goalsNum > 0) parts.push(`${goalsNum} ${goalsNum === 1 ? 'goal' : 'goals'}`);
+          if (assistsNum > 0) parts.push(`${assistsNum} ${assistsNum === 1 ? 'assist' : 'assists'}`);
+          if (shots && parseInt(shots) > 0) parts.push(`${shots} shots`);
+          if (yellow && yellow !== "0") parts.push('yellow card');
+          if (red && red !== "0") parts.push('red card');
+          if (!parts.length) continue;
+          line += ` ${parts.join(', ')}`;
+          skaters.push({ name, line });
         }
       }
     }
