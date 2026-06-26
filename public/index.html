@@ -268,8 +268,10 @@ async function findTeamGame(sport, league, teamId, teamAbbr) {
   const teamGames = all.filter(e => e.competitions?.[0]?.competitors?.some(c => String(c.team?.id) === String(teamId)));
 
   teamGames.sort((a, b) => {
-    const aLive = !a.status?.type?.completed && a.status?.type?.description?.toLowerCase().includes('progress');
-    const bLive = !b.status?.type?.completed && b.status?.type?.description?.toLowerCase().includes('progress');
+    const aState = (a.status?.type?.state || '').toLowerCase();
+    const bState = (b.status?.type?.state || '').toLowerCase();
+    const aLive = !a.status?.type?.completed && (aState ? aState === 'in' : a.status?.type?.description?.toLowerCase().includes('progress'));
+    const bLive = !b.status?.type?.completed && (bState ? bState === 'in' : b.status?.type?.description?.toLowerCase().includes('progress'));
     if (aLive && !bLive) return -1;
     if (!aLive && bLive) return 1;
     return new Date(b.date || 0) - new Date(a.date || 0);
@@ -285,7 +287,14 @@ function parseGame(game, teamId) {
   const opp = comp.competitors.find(c => String(c.team?.id) !== String(teamId));
   const completed = comp.status?.type?.completed;
   const statusDesc = comp.status?.type?.description || '';
-  const isLive = !completed && (statusDesc.toLowerCase().includes('progress') || statusDesc.toLowerCase().includes('end of'));
+  const statusState = (comp.status?.type?.state || '').toLowerCase(); // 'pre' | 'in' | 'post' -- reliable across all sports
+  // Prefer the machine-readable state field. Soccer statuses like "1st Half", "Halftime",
+  // "2nd Half" don't contain "progress" or "end of", so the old text-matching approach
+  // mistakenly treated in-progress soccer games as not-yet-started. Fall back to text
+  // matching only if state is missing (older/cached responses).
+  const isLive = !completed && (statusState
+    ? statusState === 'in'
+    : (statusDesc.toLowerCase().includes('progress') || statusDesc.toLowerCase().includes('end of') || statusDesc.toLowerCase().includes('half')));
   const isScheduled = !completed && !isLive;
   const teamScore = parseInt(team?.score || '0');
   const oppScore = parseInt(opp?.score || '0');
